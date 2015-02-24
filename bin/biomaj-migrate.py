@@ -92,6 +92,9 @@ def main():
     sys.exit(1)
 
   data_dir = biomajconfig['data.dir']
+  if data_dir.endswith('/'):
+    data_dir = data_dir[:-1]
+
   if not os.path.dirname(data_dir) == os.path.dirname(BiomajConfig.global_config.get('GENERAL','data.dir')):
     logging.error('Data dirs are different, please use the same data dirs')
     sys.exit(1)
