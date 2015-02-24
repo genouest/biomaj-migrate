@@ -35,11 +35,12 @@ def migrate_bank(cur, bank):
           prod['remoterelease'] = row[0]
           pathelts = prod['path'].split('/')
           release_dir = pathelts[len(pathelts)-1]
+          prod['prod_dir'] = release_dir
           pattern = re.compile(".*__(\d+)$")
           relmatch = pattern.match(release_dir)
           if relmatch:
             prod['release'] = prod['release']+'__'+relmatch.group(1)
-        b = Bank(bank['name'])
+        b = Bank(bank['name'], no_log=True)
         prod_present = False
         for p in b.bank['production']:
           if p['release'] == prod['release']:
@@ -52,8 +53,22 @@ def migrate_bank(cur, bank):
         b.session._session['status'][Workflow.FLOW_OVER] = True
         b.session._session['update'] = True
         b.save_session()
+        # Listing files ?
+        root_files = []
+        if os.path.exists(prod['path']):
+          root_files = os.listdir(prod['path'])
+        for root_file in root_files:
+          if root_file.startswith('listing.'):
+            fileName, fileExtension = os.path.splitext(root_file)
+            f = open(os.path.join(prod['path'], root_file), 'r')
+            listing = f.read()
+            f.close()
+            f = open(os.path.join(prod['path'], 'listingv1'+fileExtension), 'w')
+            listing = "{\"files\": [], \"name\": \""+fileExtension.replace('.','')+"\"," +listing+"}"
+            f.write(listing)
+            f.close()
         # Current link?
-        pathelts = prod['path'].split('/') 
+        pathelts = prod['path'].split('/')
         del pathelts[-1]
         current_link = os.path.join('/'.join(pathelts),'current')
         if os.path.lexists(current_link):
@@ -149,4 +164,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
