@@ -47,6 +47,7 @@ def migrate_bank(cur, bank):
             logging.warn('Prod release already imported: '+b.name+":"+p['release'])
             continue
         b.load_session(UpdateWorkflow.FLOW)
+        b.session.set('prod_dir', prod['prod_dir'])
         b.session.set('action','update')
         b.session.set('release', prod['release'])
         b.session.set('remoterelease', prod['remoterelease'])
