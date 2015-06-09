@@ -124,6 +124,14 @@ def main():
   if not os.path.exists(BiomajConfig.global_config.get('GENERAL','conf.dir')):
     os.makedirs(BiomajConfig.global_config.get('GENERAL','conf.dir'))
   for prop_file in prop_files:
+
+    propbankconfig = {}
+    with open(prop_file,'r') as old:
+        for line in old:
+            vals = line.split('=')
+            if len(vals) > 1:
+                propbankconfig[vals[0].strip()] = vals[1].strip()
+
     newpropfile = os.path.join(BiomajConfig.global_config.get('GENERAL','conf.dir'),os.path.basename(prop_file))
     newprop = open(newpropfile,'w')
     #logging.warn("manage "+prop_file+" => "+newpropfile)
@@ -131,7 +139,14 @@ def main():
     with open(prop_file,'r') as props:
       for line in props:
         if not (line.startswith('*') or  line.startswith('/*')):
-          newprop.write(line.replace('\\\\','\\').replace('db.source','depends'))
+            # Replace config variables with new syntax ${xx} => %(xx)s, not other env variables
+            pattern = re.compile("\$\{([a-zA-Z0-9-_.]+)\}")
+            varmatch = pattern.findall(line)
+            if varmatch:
+                for match in varmatch:
+                    if match in biomajconfig or match in propbankconfig:
+                        line = line.replace('${'+match+'}','%('+match+')s')
+            newprop.write(line.replace('\\\\','\\').replace('db.source','depends'))
     newprop.close()
     b = Bank(os.path.basename(prop_file).replace('.properties',''),no_log=True)
     banks.append(b.name)
