@@ -1,8 +1,10 @@
 #!/usr/bin/python
 
-import os,sys
+import os
+import sys
 import argparse
-import pkg_resources
+import datetime
+import time
 import logging
 import re
 import fnmatch
@@ -14,14 +16,16 @@ from biomaj.config import BiomajConfig
 from biomaj.workflow import UpdateWorkflow, RemoveWorkflow, Workflow
 
 def migrate_bank(cur, bank):
-    cur.execute("SELECT path, session, creation, remove from productionDirectory WHERE ref_idbank="+str(bank['dbid']))
+    cur.execute("SELECT path, session, creation, remove, size from productionDirectory WHERE ref_idbank="+str(bank['dbid']))
     bank['productionDirectory'] = []
     for row in cur.fetchall():
       if not row[3]:
-        bank['productionDirectory'].append({
-          'session': row[1], 'path': row[0],
-          'creation': row[2]
-      })
+          bank['productionDirectory'].append({
+            'path': row[0],
+            'session': row[1],
+            'creation': row[2],
+            'size': row[4],
+          })
     for prod in bank['productionDirectory']:
       if prod['session']:
         cur.execute("SELECT ref_idupdateBank from session WHERE idsession="+str(prod['session']))
@@ -40,8 +44,20 @@ def migrate_bank(cur, bank):
           relmatch = pattern.match(release_dir)
           if relmatch:
             prod['release'] = prod['release']+'__'+relmatch.group(1)
+
+        # We create the session id from the productionDirectory.creation field
+        session_id = time.mktime(datetime.datetime.strptime(str(prod['creation']), "%Y-%m-%d %H:%M:%S").timetuple())
+        session_exists = False
         b = Bank(bank['name'], no_log=True)
-        prod_present = False
+
+        # We check we did not already imported this session into the database
+        for s in b.bank['sessions']:
+          if s['id'] == session_id:
+            logging.warn('Session already imported: ' + b.name + ':' + str(prod['creation']))
+            session_exists = True
+        if session_exists:
+          continue
+
         for p in b.bank['production']:
           if p['release'] == prod['release']:
             logging.warn('Prod release already imported: '+b.name+":"+p['release'])
@@ -51,9 +67,14 @@ def migrate_bank(cur, bank):
         b.session.set('action','update')
         b.session.set('release', prod['release'])
         b.session.set('remoterelease', prod['remoterelease'])
+        # Set production size from productionDirectory.size field
+        b.session.set('fullsize', prod['size'])
         b.session._session['status'][Workflow.FLOW_OVER] = True
         b.session._session['update'] = True
+        # We set the session.id (timestamp) with creation field fron productionDirectory table
+        b.session.set('id', session_id)
         b.save_session()
+
         # Listing files ?
         root_files = []
         if os.path.exists(prod['path']):
@@ -75,9 +96,9 @@ def migrate_bank(cur, bank):
         if os.path.lexists(current_link):
           b.bank['current'] = b.session._session['id']
           b.banks.update({'name': b.name},
-                      {
-                      '$set': {'current': b.session._session['id']}
-                      })
+                         {
+                           '$set': {'current': b.session._session['id']}
+                         })
 
 def main():
 
