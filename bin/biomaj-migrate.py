@@ -196,7 +196,7 @@ def main():
     cur.execute("SELECT name,idbank from bank")
     for row in cur.fetchall():
         oldbanks[row[0]] = { "dbid": row[1], "name": row[0] }
-    for bank,value in oldbanks.iteritems():
+    for bank,value in iter(oldbanks.items()):
         migrate_bank(cur, value)
   except mysql.connector.Error as error:
     if error.errno == errorcode.ER_ACCESS_DENIED_ERROR:
