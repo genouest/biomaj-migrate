@@ -8,8 +8,8 @@ import time
 import logging
 import re
 import fnmatch
-
-import MySQLdb
+import mysql.connector
+from mysql.connector import errorcode
 
 from biomaj.bank import Bank
 from biomaj.config import BiomajConfig
@@ -172,7 +172,7 @@ def main():
     b = Bank(os.path.basename(prop_file).replace('.properties',''),no_log=True)
     banks.append(b.name)
 
-    #database.url=jdbc\:mysql\://genobdd.genouest.org/biomaj_log
+  # database.url=jdbc\:mysql\://genobdd.genouest.org/biomaj_log
   vals = biomajconfig['database.url'].split('/')
   urllen = len(vals)
   db_name = vals[urllen-1]
@@ -187,17 +187,27 @@ def main():
   db_password = biomajconfig['database.password']
   if args.password:
     db_password = args.password
-  db = MySQLdb.connect(host=db_host, # your host, usually localhost
-                   user=db_user, # your username
-                    passwd=db_password, # your password
-                    db=db_name) # name of the data base
-  cur = db.cursor()
-  oldbanks = {}
-  cur.execute("SELECT name,idbank from bank")
-  for row in cur.fetchall():
-    oldbanks[row[0]] = { "dbid": row[1], "name": row[0] }
-  for bank,value in oldbanks.iteritems():
-    migrate_bank(cur, value)
+
+  try:
+    cnx = mysql.connector.connect(host=db_host, database=db_name,
+                                  user=db_user, password=db_password)
+    cur = cnx.cursor()
+    oldbanks = {}
+    cur.execute("SELECT name,idbank from bank")
+    for row in cur.fetchall():
+        oldbanks[row[0]] = { "dbid": row[1], "name": row[0] }
+    for bank,value in iter(oldbanks.items()):
+        migrate_bank(cur, value)
+  except mysql.connector.Error as error:
+    if error.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+      print("Wrong username or password: %s" % error.msg)
+    elif err.errno == errorcode.ER_BAD_DB_ERROR:
+      print("Database does not exist: %s" % error.msg)
+    else:
+      print("Unknown error: %s" % err)
+  finally:
+      cnx.close()
+
 
 if __name__ == '__main__':
     main()
