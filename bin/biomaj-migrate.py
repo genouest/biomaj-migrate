@@ -222,15 +222,9 @@ def main():
         cnx = mysql.connector.connect(host=db_host, database=db_name,
                                       user=db_user, password=db_password)
         cur = cnx.cursor()
-        # oldbanks = {}
         cur.execute("SELECT name FROM bank")
         for row in cur.fetchall():
             migrate_bank(cur, row[0], history=args.history)
-            # cur.execute("SELECT name,idbank from bank")
-            # for row in cur.fetchall():
-            #     oldbanks[row[0]] = { "dbid": row[1], "name": row[0] }
-            # for bank,value in iter(oldbanks.items()):
-            #     migrate_bank(cur, value)
     except mysql.connector.Error as error:
         if error.errno == errorcode.ER_ACCESS_DENIED_ERROR:
             print("Wrong username or password: %s" % error.msg)
