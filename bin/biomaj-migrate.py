@@ -3,7 +3,7 @@
 import os
 import sys
 import argparse
-import bitmath
+import humanfriendly
 import datetime
 import time
 import logging
@@ -16,23 +16,6 @@ from biomaj.bank import Bank
 from biomaj.config import BiomajConfig
 from biomaj.workflow import UpdateWorkflow, RemoveWorkflow, Workflow
 
-def convert_size(size):
-    """Convert old size from BioMAJ 1.2.x to size in bytes"""
-    supported_units = ['K', 'M', 'G', 'T', 'P']
-    pattern_size = re.compile("^([\d,]+)(\w)$")
-    relmatch = pattern_size.match(size)
-    if relmatch:
-        if relmatch.group(2) in supported_units:
-            size = relmatch.group(1)
-            unit = relmatch.group(2)
-            unit += 'iB'
-            size = size.replace(',', '.')
-            try:
-                new_size = bitmath.parse_string(size + ' ' + unit).to_Byte()
-                return float(new_size)
-            except ValueError as err:
-                raise Exception("Can't convert size: %s" % str(err))
-    return 0
 
 def migrate_bank(cur, bank, history=False):
     """
@@ -62,7 +45,7 @@ def migrate_bank(cur, bank, history=False):
             'session': row[1],
             'creation': row[2],
             'remove': row[3],
-            'size': convert_size(row[4]),
+            'size': humanfriendly.parse_size(row[4].replace(',', '.')),
             'release': row[5],
             'remoterelease': row[5],
             'logfile': row[6]
