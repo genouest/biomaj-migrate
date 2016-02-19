@@ -7,6 +7,8 @@ __pycache__/
 # Coveralls
 .coveralls.yml
 
+# PyCharm
+.idea/
 # C extensions
 *.so
 

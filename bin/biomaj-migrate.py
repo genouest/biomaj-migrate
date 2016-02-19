@@ -3,6 +3,7 @@
 import os
 import sys
 import argparse
+import humanfriendly
 import datetime
 import time
 import logging
@@ -44,7 +45,7 @@ def migrate_bank(cur, bank, history=False):
             'session': row[1],
             'creation': row[2],
             'remove': row[3],
-            'size': row[4],
+            'size': humanfriendly.parse_size(row[4].replace(',', '.')),
             'release': row[5],
             'remoterelease': row[5],
             'logfile': row[6]
