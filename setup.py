@@ -11,7 +11,7 @@ config = {
     'author_email': 'olivier.sallou@irisa.fr',
     'version': '3.0.2',
     'install_requires': ['nose',
-                         'bitmath',
+                         'humanfriendly',
                          'mysql-connector-python-rf',
                          'pymongo'],
     'packages': find_packages(),
