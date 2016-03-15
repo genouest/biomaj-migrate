@@ -103,6 +103,12 @@ def migrate_bank(cur, bank, history=False):
         # Due to the way save_session set also the production, to exclude last session
         # from the production entries, we need to loop over each production entries
         if history:
+            # If we want to keep history, we also need to keep trace of the time session/update has been deleted
+            # from the database/disk
+            if prod['remove']:
+                removed = time.mktime(datetime.datetime.strptime(str(prod['remove']), "%Y-%m-%d %H:%M:%S").timetuple())
+                b.banks.update({'name': b.name, 'sessions.id': session_id},
+                               {'$set': {'sessions.$.deleted': removed}})
             for production in b.bank['production']:
                 if production['session'] in not_prod:
                     b.banks.update({'name': b.name, 'production.session': production['session']},
