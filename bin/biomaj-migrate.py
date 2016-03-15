@@ -28,7 +28,8 @@ def migrate_bank(cur, bank, history=False):
     :type history: Boolean, default False
     :return:
     """
-    query = "SELECT p.path, p.session, p.creation, p.remove, p.size, u.updateRelease, s.logfile from productionDirectory p "
+    query = "SELECT p.path, p.session, p.creation, p.remove, p.size, u.updateRelease, s.logfile, s.status "
+    query += "FROM productionDirectory p "
     query += "JOIN updateBank u on u.idLastSession = p.session JOIN bank b on b.idbank = p.ref_idbank "
     query += "LEFT JOIN session s ON s.idsession = u.idLastSession "
     query += "WHERE b.name='" + str(bank) + "' "
@@ -48,7 +49,8 @@ def migrate_bank(cur, bank, history=False):
             'size': humanfriendly.parse_size(row[4].replace(',', '.')),
             'release': row[5],
             'remoterelease': row[5],
-            'logfile': row[6]
+            'logfile': row[6],
+            'status': row[7]
         })
         # If we want to keep the history we will need to delete from 'production',
         # session(s) which have been tagged as 'removed', so row[3] is a date
@@ -89,7 +91,9 @@ def migrate_bank(cur, bank, history=False):
         b.session.set('action', 'update')
         b.session.set('release', prod['release'])
         b.session.set('remoterelease', prod['remoterelease'])
+        # Biomaj >= 3.0.14 introduce new field in sessions 'workflow_status'
         # Set production size from productionDirectory.size field
+        b.session.set('workflow_status', True if prod['status'] else False)
         b.session.set('fullsize', prod['size'])
         b.session._session['status'][Workflow.FLOW_OVER] = True
         b.session._session['update'] = True
