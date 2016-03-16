@@ -100,10 +100,14 @@ def migrate_bank(cur, bank, history=False):
         # We set the session.id (timestamp) with creation field from productionDirectory table
         b.session.set('id', session_id)
         b.save_session()
+        # We need set update the field 'last_update_time' to the time the bank has been created
+        # because 'save_session' set this value to the time it is called
+        b.banks.update({'name': b.name, 'sessions.id': session_id},
+                       {'$set': {'sessions.$.last_update_time': session_id}})
         # Keep trace of the logfile. We need to do a manual update
         if prod['logfile'] and os.path.exists(prod['logfile']):
             b.banks.update({'name': b.name, 'sessions.id': session_id},
-                           {'$set': {"sessions.$.log_file": prod['logfile']}})
+                           {'$set': {'sessions.$.log_file': prod['logfile']}})
         # Due to the way save_session set also the production, to exclude last session
         # from the production entries, we need to loop over each production entries
         if history:
