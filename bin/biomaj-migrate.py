@@ -3,12 +3,14 @@
 import os
 import sys
 import argparse
-import humanfriendly
 import datetime
-import time
+import fnmatch
+
+import humanfriendly
+import json
 import logging
 import re
-import fnmatch
+import time
 import mysql.connector
 from mysql.connector import errorcode
 
@@ -28,10 +30,12 @@ def migrate_bank(cur, bank, history=False):
     :type history: Boolean, default False
     :return:
     """
-    query = "SELECT p.path, p.session, p.creation, p.remove, p.size, u.updateRelease, s.logfile, s.status "
-    query += "FROM productionDirectory p "
+    query = "SELECT p.path, p.session, p.creation, p.remove, p.size, u.updateRelease, s.logfile, s.status, r.protocol, "
+    query += "r.server, r.remoteDir FROM productionDirectory p "
     query += "JOIN updateBank u on u.idLastSession = p.session JOIN bank b on b.idbank = p.ref_idbank "
     query += "LEFT JOIN session s ON s.idsession = u.idLastSession "
+    query += "JOIN configuration c ON c.idconfiguration = u.ref_idconfiguration JOIN remoteInfo r "
+    query += "ON r.idremoteInfo = c.ref_idremoteInfo "
     query += "WHERE b.name='" + str(bank) + "' "
     if not history:
         query += "AND p.remove IS NULL "
@@ -50,7 +54,10 @@ def migrate_bank(cur, bank, history=False):
             'release': row[5],
             'remoterelease': row[5],
             'logfile': row[6],
-            'status': row[7]
+            'status': row[7],
+            'protocol': row[8],
+            'server': row[9],
+            'remotedir': row[10]
         })
         # If we want to keep the history we will need to delete from 'production',
         # session(s) which have been tagged as 'removed', so row[3] is a date
@@ -136,6 +143,28 @@ def migrate_bank(cur, bank, history=False):
                 listing = "{\"files\": [], \"name\": \"" + fileExtension.replace('.', '') + "\"," + listing + "}"
                 f.write(listing)
                 f.close()
+            if root_file.startswith('flat'):
+                flat_dir = os.path.join(prod['path'], root_file)
+                if not os.path.exists(flat_dir):
+                    print("[%s] [WARN] Can't list %s/flat directory. Skipping ..." % (b.name, prod['path']))
+                    continue
+                flat_files = os.listdir(os.path.join(prod['path'], 'flat'))
+                files_info = []
+                for flat_file in flat_files:
+                    try:
+                        file_info = os.stat(flat_file)
+                    except IOError as err:
+                        print("[%s][WARN] Failed to get info about %s" % (b.name,str(file_info)))
+                        continue
+                    ctime = datetime.datetime.fromtimestamp(flat_file[9])
+                    files_info.append({'name': flat_file, 'save_as': flat_file,
+                                       'user': flat_file[4], 'group': flat_file[5],
+                                       'year': ctime.year, 'day': ctime.day, 'month': ctime.month,
+                                       'root': prod['remotedir'], 'url': prod['protocol'] + '://' + prod['server'],
+                                       'size': flat_file[6]})
+                cache_dir = b.config.get('cache.dir')
+                local_files = open(os.path.join(cache_dir, 'files_' + str(session_id)), 'w')
+                local_files.write(json.dump(files_info))
         # Current link?
         pathelts = prod['path'].split('/')
         del pathelts[-1]
