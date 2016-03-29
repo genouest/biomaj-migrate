@@ -3,12 +3,14 @@
 import os
 import sys
 import argparse
-import humanfriendly
 import datetime
-import time
+import fnmatch
+
+import humanfriendly
+import json
 import logging
 import re
-import fnmatch
+import time
 import mysql.connector
 from mysql.connector import errorcode
 
@@ -28,10 +30,12 @@ def migrate_bank(cur, bank, history=False):
     :type history: Boolean, default False
     :return:
     """
-    query = "SELECT p.path, p.session, p.creation, p.remove, p.size, u.updateRelease, s.logfile, s.status "
-    query += "FROM productionDirectory p "
+    query = "SELECT p.path, p.session, p.creation, p.remove, p.size, u.updateRelease, s.logfile, s.status, r.protocol, "
+    query += "r.server, r.remoteDir FROM productionDirectory p "
     query += "JOIN updateBank u on u.idLastSession = p.session JOIN bank b on b.idbank = p.ref_idbank "
     query += "LEFT JOIN session s ON s.idsession = u.idLastSession "
+    query += "JOIN configuration c ON c.idconfiguration = u.ref_idconfiguration JOIN remoteInfo r "
+    query += "ON r.idremoteInfo = c.ref_idremoteInfo "
     query += "WHERE b.name='" + str(bank) + "' "
     if not history:
         query += "AND p.remove IS NULL "
@@ -50,7 +54,10 @@ def migrate_bank(cur, bank, history=False):
             'release': row[5],
             'remoterelease': row[5],
             'logfile': row[6],
-            'status': row[7]
+            'status': row[7],
+            'protocol': row[8],
+            'server': row[9],
+            'remotedir': row[10]
         })
         # If we want to keep the history we will need to delete from 'production',
         # session(s) which have been tagged as 'removed', so row[3] is a date
@@ -108,6 +115,17 @@ def migrate_bank(cur, bank, history=False):
         if prod['logfile'] and os.path.exists(prod['logfile']):
             b.banks.update({'name': b.name, 'sessions.id': session_id},
                            {'$set': {'sessions.$.log_file': prod['logfile']}})
+
+        # Downloaded and local files (created by 'bank.save_session')
+        # remove as created empty due to 'save_sessions' call
+        cache_dir = b.config.get('cache.dir')
+        download_file = os.path.join(cache_dir, 'files_' + str(session_id))
+        local_file = os.path.join(cache_dir, 'local_files_' + str(session_id))
+        if os.path.isfile(download_file):
+            os.unlink(download_file)
+        if os.path.isfile(local_file):
+            os.unlink(local_file)
+
         # Due to the way save_session set also the production, to exclude last session
         # from the production entries, we need to loop over each production entries
         if history:
@@ -136,6 +154,31 @@ def migrate_bank(cur, bank, history=False):
                 listing = "{\"files\": [], \"name\": \"" + fileExtension.replace('.', '') + "\"," + listing + "}"
                 f.write(listing)
                 f.close()
+            if root_file.startswith('flat') and session_id not in not_prod:
+                flat_dir = os.path.join(prod['path'], root_file)
+                if not os.path.exists(flat_dir):
+                    print("[%s] [WARN] Can't list %s/flat directory. Skipping ..." % (b.name, prod['path']))
+                    continue
+                flat_files = os.listdir(flat_dir)
+                files_info = []
+                for flat_file in flat_files:
+                    try:
+                        file_info = os.stat(os.path.join(flat_dir, flat_file))
+                    except IOError as err:
+                        print("[%s][WARN] Failed to stat get info from %s: %s" % (b.name,str(file_info), str(err)))
+                        continue
+                    
+                    ctime = datetime.datetime.fromtimestamp(file_info[9])
+                    files_info.append({'name': flat_file, 'save_as': flat_file,
+                                       'user': file_info[4], 'group': file_info[5],
+                                       'year': ctime.year, 'day': ctime.day, 'month': ctime.month,
+                                       'root': prod['remotedir'], 'url': prod['protocol'] + '://' + prod['server'],
+                                       'size': file_info[6]})
+                if len(files_info) > 0:
+                    # Saved files
+                    local_file = open(local_file, 'w')
+                    local_file.write(json.dumps(files_info))
+                    local_file.close()
         # Current link?
         pathelts = prod['path'].split('/')
         del pathelts[-1]
