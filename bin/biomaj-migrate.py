@@ -115,6 +115,17 @@ def migrate_bank(cur, bank, history=False):
         if prod['logfile'] and os.path.exists(prod['logfile']):
             b.banks.update({'name': b.name, 'sessions.id': session_id},
                            {'$set': {'sessions.$.log_file': prod['logfile']}})
+
+        # Downloaded and local files (created by 'bank.save_session')
+        # remove as created empty due to 'save_sessions' call
+        cache_dir = b.config.get('cache.dir')
+        download_file = os.path.join(cache_dir, 'files_' + str(session_id))
+        local_file = os.path.join(cache_dir, 'local_files_' + str(session_id))
+        if os.path.isfile(download_file):
+            os.unlink(download_file)
+        if os.path.isfile(local_file):
+            os.unlink(local_file)
+
         # Due to the way save_session set also the production, to exclude last session
         # from the production entries, we need to loop over each production entries
         if history:
@@ -143,28 +154,31 @@ def migrate_bank(cur, bank, history=False):
                 listing = "{\"files\": [], \"name\": \"" + fileExtension.replace('.', '') + "\"," + listing + "}"
                 f.write(listing)
                 f.close()
-            if root_file.startswith('flat'):
+            if root_file.startswith('flat') and session_id not in not_prod:
                 flat_dir = os.path.join(prod['path'], root_file)
                 if not os.path.exists(flat_dir):
                     print("[%s] [WARN] Can't list %s/flat directory. Skipping ..." % (b.name, prod['path']))
                     continue
-                flat_files = os.listdir(os.path.join(prod['path'], 'flat'))
+                flat_files = os.listdir(flat_dir)
                 files_info = []
                 for flat_file in flat_files:
                     try:
-                        file_info = os.stat(flat_file)
+                        file_info = os.stat(os.path.join(flat_dir, flat_file))
                     except IOError as err:
-                        print("[%s][WARN] Failed to get info about %s" % (b.name,str(file_info)))
+                        print("[%s][WARN] Failed to stat get info from %s: %s" % (b.name,str(file_info), str(err)))
                         continue
-                    ctime = datetime.datetime.fromtimestamp(flat_file[9])
+                    
+                    ctime = datetime.datetime.fromtimestamp(file_info[9])
                     files_info.append({'name': flat_file, 'save_as': flat_file,
-                                       'user': flat_file[4], 'group': flat_file[5],
+                                       'user': file_info[4], 'group': file_info[5],
                                        'year': ctime.year, 'day': ctime.day, 'month': ctime.month,
                                        'root': prod['remotedir'], 'url': prod['protocol'] + '://' + prod['server'],
-                                       'size': flat_file[6]})
-                cache_dir = b.config.get('cache.dir')
-                local_files = open(os.path.join(cache_dir, 'files_' + str(session_id)), 'w')
-                local_files.write(json.dump(files_info))
+                                       'size': file_info[6]})
+                if len(files_info) > 0:
+                    # Saved files
+                    local_file = open(local_file, 'w')
+                    local_file.write(json.dumps(files_info))
+                    local_file.close()
         # Current link?
         pathelts = prod['path'].split('/')
         del pathelts[-1]
